@@ -308,31 +308,11 @@
 
         .theme-icon {
             transition: all 0.3s ease;
-        }
-
-        [data-theme="light"] .theme-icon.moon {
             display: none;
         }
-
-        [data-theme="light"] .theme-icon.sun {
-            display: block;
-        }
-
-        [data-theme="dark"] .theme-icon.sun {
-            display: none;
-        }
-
-        [data-theme="dark"] .theme-icon.moon {
-            display: block;
-        }
-
-        body:not([data-theme]) .theme-icon.sun {
-            display: none;
-        }
-
-        body:not([data-theme]) .theme-icon.moon {
-            display: block;
-        }
+        /* Icon reflects the CURRENT mode: 🌙 in dark, ☀️ in light */
+        [data-theme="dark"]  .theme-icon.moon { display: block; }
+        [data-theme="light"] .theme-icon.sun  { display: block; }
         
         .stats-grid {
             display: grid;
@@ -1529,9 +1509,9 @@
         /* KPI cards — never overflow, shrink the big numbers responsively */
         .stats-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
         .stat-card{ padding:16px 12px; border-radius:20px; min-width:0; }
-        .stat-value{ font-size:clamp(17px,5.4vw,23px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .stat-value{ font-size:clamp(15px,4.6vw,22px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .stat-label{ font-size:12px; margin-top:3px; }
-        @media (min-width:600px){ .stats-grid{ grid-template-columns:repeat(3,minmax(0,1fr)); } .stat-value{ font-size:clamp(16px,2.8vw,21px); } }
+        @media (min-width:600px){ .stats-grid{ grid-template-columns:repeat(3,minmax(0,1fr)); } .stat-value{ font-size:clamp(14px,2.5vw,20px); } }
 
         /* Sections + region tiles a touch tighter */
         .section{ border-radius:22px; padding:16px; margin-bottom:14px; }
@@ -2131,11 +2111,11 @@
             const t = dashboardData.totals;
             document.getElementById('totalTickets').textContent = fmtInt(t.tickets);
             document.getElementById('remainingTickets').textContent = fmtInt(t.remaining);
-            document.getElementById('totalCost').textContent = money0(t.cost);
-            document.getElementById('totalSales').textContent = money0(t.sales);
+            document.getElementById('totalCost').textContent = formatCurrency(t.cost);
+            document.getElementById('totalSales').textContent = formatCurrency(t.sales);
             document.getElementById('needOrdersTotal').textContent = fmtInt(t.needOrders);
             const p = document.getElementById('netProfit');
-            p.textContent = signed0(t.profit || 0);
+            p.textContent = signedCurrency(t.profit || 0);
             p.className = 'stat-value ' + ((t.profit || 0) >= 0 ? 'profit-positive' : 'profit-negative');
         }
 
@@ -2146,8 +2126,8 @@
                     <div class="rm-name">${r.emoji} ${r.name}</div>
                     <div class="rm-stat"><span>Matches</span><b>${r.matchCount}</b></div>
                     <div class="rm-stat"><span>Tickets</span><b>${r.totals.tickets} (${r.totals.remaining} left)</b></div>
-                    <div class="rm-stat"><span>Sales</span><b>${money0(r.totals.sales)}</b></div>
-                    <div class="rm-stat"><span>Profit</span><b class="${r.totals.profit>=0?'profit-positive':'profit-negative'}">${signed0(r.totals.profit)}</b></div>
+                    <div class="rm-stat"><span>Sales</span><b>${formatCurrency(r.totals.sales)}</b></div>
+                    <div class="rm-stat"><span>Profit</span><b class="${r.totals.profit>=0?'profit-positive':'profit-negative'}">${signedCurrency(r.totals.profit)}</b></div>
                 </div>`).join('');
         }
 
@@ -2216,9 +2196,9 @@
                             </div>
                             <div class="match-details">
                                 <div class="detail-item"><div class="detail-label">Sold</div><div class="detail-value">${sold}</div></div>
-                                <div class="detail-item"><div class="detail-label">Cost</div><div class="detail-value">${money0(s.totalCost)}</div></div>
-                                <div class="detail-item"><div class="detail-label">Sales</div><div class="detail-value">${money0(s.sales)}</div></div>
-                                <div class="detail-item"><div class="detail-label">Profit</div><div class="detail-value ${s.profit>=0?'profit-positive':'profit-negative'}">${signed0(s.profit)}</div></div>
+                                <div class="detail-item"><div class="detail-label">Cost</div><div class="detail-value">${formatCurrency(s.totalCost)}</div></div>
+                                <div class="detail-item"><div class="detail-label">Sales</div><div class="detail-value">${formatCurrency(s.sales)}</div></div>
+                                <div class="detail-item"><div class="detail-label">Profit</div><div class="detail-value ${s.profit>=0?'profit-positive':'profit-negative'}">${signedCurrency(s.profit)}</div></div>
                             </div>
                         </div>`;
                     }).join('');
@@ -2266,9 +2246,9 @@
                     <div class="match-stat-card"><div class="match-stat-value">${s.tickets}</div><div class="match-stat-label">Tickets</div></div>
                     <div class="match-stat-card"><div class="match-stat-value">${sold}</div><div class="match-stat-label">Sold</div></div>
                     <div class="match-stat-card"><div class="match-stat-value">${s.remaining}</div><div class="match-stat-label">Remaining</div></div>
-                    <div class="match-stat-card"><div class="match-stat-value ${s.profit>=0?'profit-positive':'profit-negative'}">${signed0(s.profit)}</div><div class="match-stat-label">Profit</div></div>
-                    <div class="match-stat-card"><div class="match-stat-value">${money0(s.totalCost)}</div><div class="match-stat-label">Cost</div></div>
-                    <div class="match-stat-card"><div class="match-stat-value">${money0(s.sales)}</div><div class="match-stat-label">Sales</div></div>
+                    <div class="match-stat-card"><div class="match-stat-value ${s.profit>=0?'profit-positive':'profit-negative'}">${signedCurrency(s.profit)}</div><div class="match-stat-label">Profit</div></div>
+                    <div class="match-stat-card"><div class="match-stat-value">${formatCurrency(s.totalCost)}</div><div class="match-stat-label">Cost</div></div>
+                    <div class="match-stat-card"><div class="match-stat-value">${formatCurrency(s.sales)}</div><div class="match-stat-label">Sales</div></div>
                 </div>`;
 
             // Orders Needed (the "Need" table)
@@ -2306,11 +2286,13 @@
                 const newGroup = t.gid !== prevGid;
                 if (newGroup) { band = !band; prevGid = t.gid; }
                 const cls = [band ? 'band' : '', (newGroup && i > 0) ? 'group-start' : ''].filter(Boolean).join(' ');
-                // Profit is only real once it's actually sold for a price. No "Sold For" → no profit.
+                // Profit only shows with a real Sold For price AND a recorded net.
+                // (A sold ticket whose net cell is blank/0 shows "—", never a false £0.00.)
                 const sold = t.price > 0;
                 const soldFor = sold ? formatCurrency(t.price) : '—';
-                const profitTxt = sold ? signedCurrency(t.net) : '—';
-                const netClass = sold ? (t.net > 0 ? 'profit-positive' : (t.net < 0 ? 'profit-negative' : '')) : '';
+                const hasNet = sold && t.net !== 0;
+                const profitTxt = hasNet ? signedCurrency(t.net) : '—';
+                const netClass = hasNet ? (t.net > 0 ? 'profit-positive' : 'profit-negative') : '';
                 return `<tr class="${cls}">
                     <td style="text-align:left;">${t.cat || '—'}${seat?`<br><span class="sub">${seat}</span>`:''}</td>
                     <td>${formatCurrency(t.fv)}</td>
