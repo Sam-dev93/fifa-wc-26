@@ -1,108 +1,82 @@
-const CACHE_NAME = 'world-cup-tickets-v1';
-const urlsToCache = [
+/* ============================================================
+   World Cup 2026 — Service Worker
+   ⬆️  BUMP THIS VERSION EVERY TIME YOU DEPLOY A CHANGE.
+   Changing the string is what tells browsers a new version
+   exists → the app auto-updates and wipes the old cache.
+   ============================================================ */
+const CACHE_NAME = 'world-cup-tickets-v3';
+
+const PRECACHE = [
   './',
   './index.html',
   './manifest.json'
 ];
 
-// Install event - cache assets
+// Install — pre-cache the shell and activate ASAP (no "waiting")
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
+    caches.open(CACHE_NAME).then(cache => cache.addAll(PRECACHE)).catch(() => {})
   );
-  // Force the waiting service worker to become the active service worker
   self.skipWaiting();
 });
 
-// Fetch event - serve from cache when offline
-self.addEventListener('fetch', event => {
-  // Skip non-GET requests
-  if (event.request.method !== 'GET') {
-    return;
-  }
+// Activate — delete every cache that isn't the current version, then take control
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
 
-  // Handle Google Sheets API requests differently (always network)
-  if (event.request.url.includes('googleapis.com')) {
+// Allow the page to tell a waiting worker to take over now
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
+self.addEventListener('fetch', event => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+
+  let url;
+  try { url = new URL(req.url); } catch (e) { return; }
+
+  // Google Sheets API — always live, never cached
+  if (url.hostname.indexOf('googleapis.com') !== -1) {
     event.respondWith(
-      fetch(event.request)
-        .catch(() => {
-          // Return a custom offline response for API failures
-          return new Response(JSON.stringify({
-            error: 'offline',
-            message: 'Unable to fetch data while offline'
-          }), {
-            headers: { 'Content-Type': 'application/json' }
-          });
-        })
+      fetch(req).catch(() => new Response(
+        JSON.stringify({ error: 'offline', message: 'Unable to fetch data while offline' }),
+        { headers: { 'Content-Type': 'application/json' } }
+      ))
     );
     return;
   }
 
-  event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        // Cache hit - return response
-        if (response) {
-          return response;
-        }
-
-        // Clone the request
-        const fetchRequest = event.request.clone();
-
-        return fetch(fetchRequest).then(response => {
-          // Check if valid response
-          if (!response || response.status !== 200 || response.type === 'opaque') {
-            return response;
+  // Same-origin app files (index.html, manifest, icons) — NETWORK FIRST.
+  // Always get the freshest file when online; fall back to cache when offline.
+  if (url.origin === self.location.origin) {
+    event.respondWith(
+      fetch(req)
+        .then(res => {
+          if (res && res.status === 200 && res.type === 'basic') {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(req, copy));
           }
-
-          // Clone the response
-          const responseToCache = response.clone();
-
-          // Cache the fetched response
-          caches.open(CACHE_NAME)
-            .then(cache => {
-              cache.put(event.request, responseToCache);
-            });
-
-          return response;
-        });
-      })
-      .catch(() => {
-        // Offline fallback
-        console.log('Offline - returning cached index.html');
-        return caches.match('./index.html');
-      })
-  );
-});
-
-// Activate event - clean up old caches
-self.addEventListener('activate', event => {
-  const cacheWhitelist = [CACHE_NAME];
-  
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
-            console.log('Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
+          return res;
         })
-      );
-    })
-  );
-  
-  // Claim clients
-  return self.clients.claim();
-});
-
-// Handle app updates
-self.addEventListener('message', event => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
+        .catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
+    );
+    return;
   }
+
+  // Cross-origin libraries (e.g. jsPDF from a CDN) — cache first, they rarely change
+  event.respondWith(
+    caches.match(req).then(cached => cached || fetch(req).then(res => {
+      if (res && res.status === 200) {
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(req, copy));
+      }
+      return res;
+    }).catch(() => cached))
+  );
 });

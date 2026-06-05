@@ -1,7 +1,7 @@
 {
-  "name": "World Cup 2026 Ticket Dashboard",
-  "short_name": "WC Tickets",
-  "description": "World Cup 2026 ticket management dashboard",
+  "name": "FIFA 26 Stock",
+  "short_name": "FIFA 26 Stock",
+  "description": "FIFA World Cup 2026 ticket stock dashboard",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#181818",

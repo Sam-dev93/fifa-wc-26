@@ -5,14 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="World Cup Tickets">
+    <meta name="apple-mobile-web-app-title" content="FIFA 26 Stock">
     <meta name="theme-color" content="#181818">
     <meta name="mobile-web-app-capable" content="yes">
     <link rel="manifest" href="manifest.json">
-    <title>World Cup 2026 - Ticket Dashboard</title>
+    <title>FIFA 26 Stock</title>
 
     <meta name="description" content="World Cup 2026 ticket management dashboard">
-    <meta name="application-name" content="World Cup Tickets">
+    <meta name="application-name" content="FIFA 26 Stock">
     <meta name="format-detection" content="telephone=no">
     <link rel="apple-touch-icon" sizes="180x180" href="icon-192.png">
     <link rel="icon" type="image/png" sizes="32x32" href="icon-192.png">
@@ -1610,7 +1610,7 @@
         </div>
 
         <div class="header">
-            <h1>World Cup 2026</h1>
+            <h1>FIFA 26 Stock</h1>
             <div class="subtitle-row"><p>Ticket Dashboard</p></div>
 
             <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
@@ -1695,7 +1695,7 @@
         <div class="bottom-spacer"></div>
 
         <div id="installBanner" class="install-banner">
-            <span>Add World Cup Tickets to your home screen!</span>
+            <span>Add FIFA 26 Stock to your home screen!</span>
             <button class="install-btn" onclick="installPWA()">Install</button>
             <button class="install-banner-close" onclick="hideInstallBanner()">×</button>
         </div>
@@ -1762,16 +1762,37 @@
             window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => { if (!localStorage.getItem('theme')) setTheme(e.matches ? 'dark' : 'light'); });
         })();
 
-        /* ---- Service worker ---- */
+        /* ---- Service worker: auto-update (no prompt) ---- */
         if ('serviceWorker' in navigator) {
+            // If this page is already controlled by a SW, then a *new* worker taking
+            // control means an update shipped → reload once to load the fresh app.
+            // (We only attach this when a controller already exists, so the very first
+            // install doesn't trigger a needless reload.)
+            if (navigator.serviceWorker.controller) {
+                let refreshing = false;
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    if (refreshing) return;
+                    refreshing = true;
+                    window.location.reload();
+                });
+            }
             window.addEventListener('load', async () => {
                 try {
                     const reg = await navigator.serviceWorker.register('sw.js');
+                    // Check for a new sw.js periodically and whenever the tab regains focus
+                    setInterval(() => reg.update(), 30 * 60 * 1000);
+                    document.addEventListener('visibilitychange', () => {
+                        if (document.visibilityState === 'visible') reg.update();
+                    });
+                    // If an updated worker is already waiting, activate it immediately
+                    if (reg.waiting && navigator.serviceWorker.controller) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
                     reg.addEventListener('updatefound', () => {
                         const nw = reg.installing;
+                        if (!nw) return;
                         nw.addEventListener('statechange', () => {
+                            // New version installed alongside the running one → take over now
                             if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-                                if (confirm('New version available! Reload to update?')) { nw.postMessage({ type:'SKIP_WAITING' }); window.location.reload(); }
+                                nw.postMessage({ type: 'SKIP_WAITING' });
                             }
                         });
                     });
