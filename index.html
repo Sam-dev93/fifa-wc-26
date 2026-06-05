@@ -99,7 +99,7 @@
         .cat-table th, .cat-table td { padding:8px 10px; text-align:right; border-bottom:1px solid var(--border-primary); }
         .cat-table th { color:var(--text-secondary); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
         .cat-table td:first-child, .cat-table th:first-child { text-align:left; }
-        .cat-table tr:last-child td { border-bottom:none; font-weight:700; }
+        .cat-table tr:last-child td { border-bottom:none; }
         .cat-table .zero-row { opacity:.4; }
 
         .popup-section-title { font-size:13px; font-weight:700; color:var(--text-primary); margin:4px 0 6px; }
@@ -1579,6 +1579,12 @@
         .seats-toggle.open .chev{ transform:rotate(180deg); }
         .seats-wrap{ display:none; margin-top:10px; }
         .seats-wrap.open{ display:block; }
+
+        .need-badge{
+            font-size:11px; font-weight:700; padding:2px 9px; border-radius:var(--radius-pill);
+            background:rgba(234,179,8,.18); color:#b8860b; white-space:nowrap;
+        }
+        [data-theme="dark"] .need-badge{ color:#e3b341; }
     </style>
 </head>
 <body>
@@ -1655,6 +1661,10 @@
                     <div class="filter-group">
                         <div class="filter-group-label">Stage</div>
                         <div class="chip-row" id="stageChips"></div>
+                    </div>
+                    <div class="filter-group">
+                        <div class="filter-group-label">Orders</div>
+                        <div class="chip-row" id="needChips"></div>
                     </div>
                 </div>
 
@@ -1867,28 +1877,30 @@
                 const bought = num(cell(values, r, 1)), rem = num(cell(values, r, 2)), pl = num(cell(values, r, 3));
                 if (bought || rem || pl) cats.push({ name: nm, bought, remaining: rem, pl });
             }
-            // Ticket rows — block/row/area only appear on the first seat of a group, so carry them down
+            // Ticket rows — block/row/area AND the Listed flag are merged per group in the sheet
+            // (value only on the first row), so carry them down and reset on a new group.
             const tickets = [];
-            let section = '', cArea = '', cBlock = '', cRow = '', groupFv = null;
+            let section = '', cArea = '', cBlock = '', cRow = '', cListed = '', groupFv = null;
             for (let r = 1; r < values.length; r++) {
                 const q = String(cell(values, r, 16)).trim();
                 const fv = num(cell(values, r, 8));
-                if (q && SECTION_LABELS.includes(q.toUpperCase()) && fv === 0) { section = q; cArea = ''; cBlock = ''; cRow = ''; groupFv = null; continue; }
+                if (q && SECTION_LABELS.includes(q.toUpperCase()) && fv === 0) { section = q; cArea = ''; cBlock = ''; cRow = ''; cListed = ''; groupFv = null; continue; }
                 if (fv <= 0) continue;
                 const aRaw = String(cell(values, r, 12)).trim(); if (aRaw) cArea = aRaw;
                 const bRaw = String(cell(values, r, 13)).trim();
                 const rRaw = String(cell(values, r, 14)).trim();
-                if (bRaw) { cBlock = bRaw; cRow = rRaw; groupFv = fv; }       // new seated group
-                else if (fv !== groupFv) { cBlock = ''; cRow = ''; groupFv = fv; } // new price group, unseated
+                const lRaw = String(cell(values, r, 17)).trim();
+                if (bRaw) { cBlock = bRaw; cRow = rRaw; cListed = lRaw; groupFv = fv; }       // new seated group
+                else if (fv !== groupFv) { cBlock = ''; cRow = ''; cListed = lRaw; groupFv = fv; } // new price group
+                else if (lRaw) { cListed = lRaw; }                                            // listed value appeared mid-group
                 const seat = String(cell(values, r, 15)).trim();
                 const price = num(cell(values, r, 18));
-                const listedRaw = String(cell(values, r, 17)).trim();
                 let status = String(cell(values, r, 26)).trim();
-                if (!status) status = price > 0 ? 'Sold' : (listedRaw ? 'Listed' : 'Available');
+                if (!status) status = price > 0 ? 'Sold' : (cListed ? 'Listed' : 'Available');
                 tickets.push({
                     cat: cArea || section,
                     block: cBlock, row: cRow, seat,
-                    listedOn: listedRaw,
+                    listedOn: cListed,
                     fv, price, net: num(cell(values, r, 25)),
                     status
                 });
@@ -2019,6 +2031,7 @@
         /* ---- Filters state ---- */
         let filterRegion = 'All';
         let filterStage = 'All';
+        let filterNeed = 'all';   // 'all' | 'need'
         const STAGE_ORDER = ['Group Stage','Round of 32','Round of 16','Quarter-Final','Semi-Final','Third Place','Final'];
 
         function renderAll() {
@@ -2059,9 +2072,14 @@
             const stages = ['All', ...stagesPresent];
             document.getElementById('stageChips').innerHTML = stages.map(s =>
                 `<div class="chip ${filterStage===s?'active':''}" onclick="setStageFilter('${s}')">${s}</div>`).join('');
+            const needTotal = dashboardData.matches.filter(m => (m.needList||[]).length).length;
+            document.getElementById('needChips').innerHTML =
+                `<div class="chip ${filterNeed==='all'?'active':''}" onclick="setNeedFilter('all')">All games</div>` +
+                `<div class="chip ${filterNeed==='need'?'active':''}" onclick="setNeedFilter('need')">Need orders${needTotal?` (${needTotal})`:''}</div>`;
         }
         function setRegionFilter(r){ filterRegion=r; renderChips(); renderRegions(); }
         function setStageFilter(s){ filterStage=s; renderChips(); renderRegions(); }
+        function setNeedFilter(v){ filterNeed=v; renderChips(); renderRegions(); }
         function filterToRegion(r){ filterRegion=r; document.getElementById('regionsContainer').scrollIntoView({behavior:'smooth'}); renderChips(); renderRegions(); }
         function applyFilters(){ renderRegions(); }
 
@@ -2079,6 +2097,7 @@
             regionsToShow.forEach((region, ri) => {
                 let matches = dashboardData.matches.filter(m => m.region === region.name);
                 if (filterStage !== 'All') matches = matches.filter(m => m.stage === filterStage);
+                if (filterNeed === 'need') matches = matches.filter(m => (m.needList||[]).length > 0);
                 matches = matches.filter(m => matchPassesSearch(m, q));
                 if (matches.length === 0) return;
 
@@ -2089,6 +2108,7 @@
                     const list = byStage[stage].sort((a,b) => (a.matchNo||9999) - (b.matchNo||9999));
                     const cards = list.map(m => {
                         const s = m.summary, sold = s.tickets - s.remaining;
+                        const need = (m.needList || []).length;
                         return `
                         <div class="match-item clickable-match ${s.profit>=0?'profit-pos':'profit-neg'}" onclick="openMatchPopup('${m.id}')">
                             <div class="match-header">
@@ -2098,6 +2118,7 @@
                                         <div class="match-meta">
                                             ${m.matchNo?`<span class="match-stage-tag">M${m.matchNo}</span>`:''}
                                             ${m.city?`<span class="match-city">📍 ${m.city}</span>`:''}
+                                            ${need?`<span class="need-badge">🛒 ${need} order${need>1?'s':''}</span>`:''}
                                         </div>
                                     </div>
                                 </div>
@@ -2129,7 +2150,7 @@
                         </div>
                     </div>
                     <button class="expand-btn" onclick="toggleRegion('${idx}')"><span id="expand-text-${idx}">Show Matches (${matches.length})</span></button>
-                    <div class="team-details ${(filterRegion!=='All'||filterStage!=='All'||q)?'':'collapsed'}" id="details-${idx}">${stagesHtml}</div>
+                    <div class="team-details ${(filterRegion!=='All'||filterStage!=='All'||filterNeed!=='all'||q)?'':'collapsed'}" id="details-${idx}">${stagesHtml}</div>
                 </div>`;
             });
             container.innerHTML = html || `<div class="empty-state">No matches match your filters.</div>`;
@@ -2171,7 +2192,7 @@
                     <td style="text-align:left;">${o.cat || '—'}${o.orderId?`<br><span class="sub">#${o.orderId}</span>`:''}</td>
                     <td>${o.qty || '—'}</td>
                     <td>${o.each?formatCurrency(o.each):'—'}</td>
-                </tr>`).join('') : `<tr><td colspan="3" style="text-align:center;opacity:.6;">No outstanding orders 🎉</td></tr>`;
+                </tr>`).join('') : `<tr><td colspan="3" style="text-align:center;opacity:.6;">No need orders</td></tr>`;
             const ordersTable = `
                 <div class="popup-section-title">Orders needed${orders.length?` · ${orders.length} order${orders.length>1?'s':''}, ${totalQty} ticket${totalQty===1?'':'s'}`:''}</div>
                 <table class="cat-table orders-table">
