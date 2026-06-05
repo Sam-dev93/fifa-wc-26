@@ -1585,6 +1585,20 @@
             background:rgba(234,179,8,.18); color:#b8860b; white-space:nowrap;
         }
         [data-theme="dark"] .need-badge{ color:#e3b341; }
+
+        /* Profit/loss colour must win inside tables */
+        .tickets-table td.profit-positive, .cat-table td.profit-positive{ color:var(--accent-primary) !important; font-weight:600; }
+        .tickets-table td.profit-negative, .cat-table td.profit-negative{ color:var(--accent-red) !important; font-weight:600; }
+
+        /* Ticket table: keep money on one line, let only Cat/Seat wrap */
+        .tickets-table{ font-size:12.5px; }
+        .tickets-table th, .tickets-table td{ padding:9px 6px; white-space:nowrap; }
+        .tickets-table td:first-child, .tickets-table th:first-child{ white-space:normal; }
+
+        /* Pack mix summary */
+        .pack-mix{ display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin:4px 0 12px; font-size:13px; }
+        .pack-mix-label{ font-weight:700; color:var(--text-secondary); }
+        .pack-tag{ font-size:12px; font-weight:600; padding:3px 10px; border-radius:var(--radius-pill); background:var(--bg-tertiary); border:1px solid var(--border-primary); color:var(--text-secondary); white-space:nowrap; }
     </style>
 </head>
 <body>
@@ -1819,6 +1833,12 @@
         function signedCurrency(v) { return (v >= 0 ? '+' : '-') + formatCurrency(v); }
         function signed0(v) { return (v >= 0 ? '+' : '-') + money0(v); }
         function num(v) { if (typeof v === 'number') return v; if (v == null || v === '') return 0; const n = parseFloat(String(v).replace(/[£,\s]/g, '')); return isNaN(n) ? 0 : n; }
+        function packName(n) { return n === 1 ? 'single' : n === 2 ? 'pair' : n + '-pack'; }
+        function packMixLabel(mix) {
+            if (!mix) return '';
+            return Object.keys(mix).map(Number).sort((a,b)=>a-b)
+                .map(sz => `<span class="pack-tag">${mix[sz]}× ${packName(sz)}</span>`).join(' ');
+        }
 
         const UPPER = ['FC','AFC','USA','USNT','UK','US','NY','LA','SF','NZ','UAE','VAR','UEFA','FIFA','RO32','RO16','QTR','SEMI','FINAL'];
         const LOWER = ['v','vs','versus','and','the','of','at','in','on','for'];
@@ -1884,7 +1904,7 @@
             // Ticket rows — block/row/area AND the Listed flag are merged per group in the sheet
             // (value only on the first row), so carry them down and reset on a new group.
             const tickets = [];
-            let section = '', cArea = '', cBlock = '', cRow = '', cListed = '', groupFv = null;
+            let section = '', cArea = '', cBlock = '', cRow = '', cListed = '', groupFv = null, gid = 0;
             for (let r = 1; r < values.length; r++) {
                 const q = String(cell(values, r, 16)).trim();
                 const fv = num(cell(values, r, 8));
@@ -1894,14 +1914,15 @@
                 const bRaw = String(cell(values, r, 13)).trim();
                 const rRaw = String(cell(values, r, 14)).trim();
                 const lRaw = String(cell(values, r, 17)).trim();
-                if (bRaw) { cBlock = bRaw; cRow = rRaw; cListed = lRaw; groupFv = fv; }       // new seated group
-                else if (fv !== groupFv) { cBlock = ''; cRow = ''; cListed = lRaw; groupFv = fv; } // new price group
-                else if (lRaw) { cListed = lRaw; }                                            // listed value appeared mid-group
+                if (bRaw) { cBlock = bRaw; cRow = rRaw; cListed = lRaw; groupFv = fv; gid++; }       // new seated group
+                else if (fv !== groupFv) { cBlock = ''; cRow = ''; cListed = lRaw; groupFv = fv; gid++; } // new price group
+                else if (lRaw) { cListed = lRaw; }                                                  // listed value appeared mid-group
                 const seat = String(cell(values, r, 15)).trim();
                 const price = num(cell(values, r, 18));
                 let status = String(cell(values, r, 26)).trim();
                 if (!status) status = price > 0 ? 'Sold' : (cListed ? 'Listed' : 'Available');
                 tickets.push({
+                    gid,
                     cat: cArea || section,
                     block: cBlock, row: cRow, seat,
                     listedOn: cListed,
@@ -1909,7 +1930,16 @@
                     status
                 });
             }
-            // "Need" orders table (cols A-D): Order ID, Cat, Qty, £ Each
+            // pack sizes: how many seats share each group (single / pair / 3-pack / 4-pack …)
+            const sizeByGid = {};
+            tickets.forEach(t => { sizeByGid[t.gid] = (sizeByGid[t.gid] || 0) + 1; });
+            tickets.forEach(t => { t.pack = sizeByGid[t.gid]; });
+            const packMix = {};
+            Object.values(sizeByGid).forEach(sz => { packMix[sz] = (packMix[sz] || 0) + 1; });
+
+            // "Need" orders table (cols A-D): Order ID, Cat, Qty, £ Each. Col E = note.
+            // A live need order has a Category + Qty and is NOT marked closed (cancelled/sorted/etc).
+            const CLOSED = /cancel|sorted|sort|done|fulfil|filled|complete|paid|bought|sold|refund|got/i;
             const needList = [];
             let h = -1;
             for (let r = 0; r < values.length; r++) { if (String(cell(values, r, 0)).trim().toLowerCase() === 'order id') { h = r; break; } }
@@ -1918,16 +1948,16 @@
                     const a = String(cell(values, r, 0)).trim();
                     if (/^(selling commission|buying commission|name)$/i.test(a)) break;
                     const catN = String(cell(values, r, 1)).trim();
-                    const qtyRaw = cell(values, r, 2);
-                    const eachRaw = cell(values, r, 3);
-                    const qty = num(qtyRaw);
-                    const hasEach = eachRaw !== '' && eachRaw != null;
-                    if (!catN && qty <= 0 && !hasEach) continue;           // blank spacer row
-                    needList.push({ orderId: a, cat: catN, qty: qty || qtyRaw, each: num(eachRaw) });
+                    const qty = num(cell(values, r, 2));
+                    const each = num(cell(values, r, 3));
+                    const note = String(cell(values, r, 4)).trim();
+                    if (!catN || qty <= 0) continue;            // not a real order line
+                    if (note && CLOSED.test(note)) continue;     // order already cancelled / sorted
+                    needList.push({ orderId: a, cat: catN, qty, each, note });
                 }
             }
             const meta = parseMatchTitle(title);
-            return { region: region.name, regionEmoji: region.emoji, tabTitle: title, ...meta, summary, cats, tickets, needList };
+            return { region: region.name, regionEmoji: region.emoji, tabTitle: title, ...meta, summary, cats, tickets, needList, packMix };
         }
 
         /* ---- Fetch ---- */
@@ -2222,21 +2252,24 @@
             const ticketRows = m.tickets.length ? m.tickets.map(t => {
                 const seat = [t.block, t.row, t.seat].filter(Boolean).join('-');
                 const pillClass = t.status.toLowerCase().includes('sold') ? 'sold' : (t.status.toLowerCase().includes('list') ? 'listed' : 'available');
+                const sub = [seat, t.pack ? packName(t.pack) : ''].filter(Boolean).join(' · ');
                 return `<tr>
-                    <td style="text-align:left;">${t.cat || '—'}${seat?`<br><span class="sub">${seat}</span>`:''}</td>
+                    <td style="text-align:left;">${t.cat || '—'}${sub?`<br><span class="sub">${sub}</span>`:''}</td>
                     <td>${formatCurrency(t.fv)}</td>
                     <td>${t.price?formatCurrency(t.price):'—'}</td>
                     <td class="${t.net>=0?'profit-positive':'profit-negative'}">${t.net?signedCurrency(t.net):'—'}</td>
                     <td><span class="pill ${pillClass}">${t.status}</span></td>
                 </tr>`;
             }).join('') : `<tr><td colspan="5" style="text-align:center;opacity:.6;">No individual tickets listed</td></tr>`;
+            const packSummary = packMixLabel(m.packMix);
             const ticketTable = m.tickets.length ? `
+                ${packSummary?`<div class="pack-mix"><span class="pack-mix-label">Pack mix</span> ${packSummary}</div>`:''}
                 <button class="seats-toggle" onclick="this.nextElementSibling.classList.toggle('open'); this.classList.toggle('open');">
-                    Show all ${m.tickets.length} seats <span class="chev">▾</span>
+                    Show all ${m.tickets.length} tickets <span class="chev">▾</span>
                 </button>
                 <div class="seats-wrap">
                     <table class="tickets-table">
-                        <thead><tr><th>Cat / Seat</th><th>FV</th><th>Price</th><th>Net</th><th>Status</th></tr></thead>
+                        <thead><tr><th>Cat / Seat</th><th>FV</th><th>Price</th><th>Profit</th><th>Status</th></tr></thead>
                         <tbody>${ticketRows}</tbody>
                     </table>
                 </div>` : '';
