@@ -1943,15 +1943,18 @@
                 const bRaw = String(cell(values, r, 13)).trim();
                 const rRaw = String(cell(values, r, 14)).trim();
                 const lRaw = String(cell(values, r, 17)).trim();
-                let newGroup = false;
-                if (bRaw) { cBlock = bRaw; cListed = lRaw; groupFv = fv; newGroup = true; } // new block listing → re-read listed
-                if (rRaw) { cRow = rRaw; newGroup = true; }                                  // new row (even inside a wider block merge)
-                if (!bRaw && !rRaw) {
-                    if (lRaw) cListed = lRaw;                                                // listed value appears mid-merge
-                    if (!cBlock && !cRow && fv !== groupFv) { groupFv = fv; newGroup = true; } // unseated bulk → group by price
-                }
-                if (newGroup) gid++;
                 const seat = String(cell(values, r, 15)).trim();
+                // A new listing begins on a new Block, a new Row, or a price (FV) change.
+                let newGroup = false;
+                if (bRaw) { cBlock = bRaw; newGroup = true; }
+                if (rRaw) { cRow = rRaw; newGroup = true; }
+                if (fv !== groupFv) newGroup = true;
+                if (newGroup) {
+                    gid++; groupFv = fv;
+                    if (!bRaw && !rRaw) { cBlock = ''; cRow = ''; cListed = lRaw; } // listing with no seats of its own → unallocated
+                    else if (bRaw) { cListed = lRaw; }                              // brand-new block → re-read its Listed flag
+                    if (lRaw) cListed = lRaw;
+                } else if (lRaw) { cListed = lRaw; }                                // Listed value appears mid-merge
                 const price = num(cell(values, r, 18));
                 let status = String(cell(values, r, 26)).trim();
                 if (!status) status = price > 0 ? 'Sold' : (cListed ? 'Listed' : 'Available');
@@ -1968,11 +1971,21 @@
             const sizeByGid = {};
             tickets.forEach(t => { sizeByGid[t.gid] = (sizeByGid[t.gid] || 0) + 1; });
             tickets.forEach(t => { t.pack = sizeByGid[t.gid]; });
-            // Pack mix = what's LEFT to sell: count only not-yet-sold seats, grouped by listing.
-            const remByGid = {};
-            tickets.forEach(t => { if (!/sold/i.test(t.status)) remByGid[t.gid] = (remByGid[t.gid] || 0) + 1; });
+            // Packs left = what's not yet sold. Only SEATED listings (real block/row) count as packs;
+            // tickets with no block/row are bulk/unallocated inventory, counted separately.
+            const remByGid = {}, seatedGid = {};
+            tickets.forEach(t => {
+                if (/sold/i.test(t.status)) return;
+                remByGid[t.gid] = (remByGid[t.gid] || 0) + 1;
+                if (t.block || t.row) seatedGid[t.gid] = true;
+            });
             const packMix = {};
-            Object.values(remByGid).forEach(sz => { if (sz > 0) packMix[sz] = (packMix[sz] || 0) + 1; });
+            let unallocated = 0;
+            Object.keys(remByGid).forEach(gid => {
+                const sz = remByGid[gid];
+                if (seatedGid[gid]) packMix[sz] = (packMix[sz] || 0) + 1;
+                else unallocated += sz;
+            });
 
             // "Need" orders table (cols A-D): Order ID, Cat, Qty, £ Each. Col E = note.
             // A live need order has a Category + Qty and is NOT marked closed (cancelled/sorted/etc).
@@ -1994,7 +2007,7 @@
                 }
             }
             const meta = parseMatchTitle(title);
-            return { region: region.name, regionEmoji: region.emoji, tabTitle: title, ...meta, summary, cats, tickets, needList, packMix };
+            return { region: region.name, regionEmoji: region.emoji, tabTitle: title, ...meta, summary, cats, tickets, needList, packMix, unallocated };
         }
 
         /* ---- Fetch ---- */
@@ -2306,7 +2319,7 @@
                     <td><span class="pill ${pillClass}">${t.status}</span></td>
                 </tr>`;
             }).join('') : `<tr><td colspan="5" style="text-align:center;opacity:.6;">No individual tickets listed</td></tr>`;
-            const packSummary = packMixLabel(m.packMix);
+            const packSummary = [packMixLabel(m.packMix), (m.unallocated ? `<span class="pack-tag">${m.unallocated} unallocated</span>` : '')].filter(Boolean).join(' ');
             const ticketTable = m.tickets.length ? `
                 <div class="pack-mix"><span class="pack-mix-label">Packs left</span> ${packSummary || '<span class="pack-tag">All sold ✅</span>'}</div>
                 <button class="seats-toggle" onclick="this.nextElementSibling.classList.toggle('open'); this.classList.toggle('open');">
