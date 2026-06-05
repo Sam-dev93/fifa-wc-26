@@ -1594,6 +1594,10 @@
         .tickets-table{ font-size:12.5px; }
         .tickets-table th, .tickets-table td{ padding:9px 6px; white-space:nowrap; }
         .tickets-table td:first-child, .tickets-table th:first-child{ white-space:normal; }
+        /* Pack grouping: shade alternate packs + a divider between them so groups read as blocks */
+        .tickets-table tbody tr td{ border-bottom:none; }
+        .tickets-table tbody tr.band td{ background:var(--bg-tertiary); }
+        .tickets-table tbody tr.group-start td{ border-top:1px solid var(--border-secondary); }
 
         /* Pack mix summary */
         .pack-mix{ display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin:4px 0 12px; font-size:13px; }
@@ -2270,15 +2274,19 @@
                     <tbody>${catRows}</tbody>
                 </table>`;
 
-            const ticketRows = m.tickets.length ? m.tickets.map(t => {
+            let prevGid = null, band = false;
+            const ticketRows = m.tickets.length ? m.tickets.map((t, i) => {
                 const seat = [t.block, t.row, t.seat].filter(Boolean).join('-');
                 const pillClass = t.status.toLowerCase().includes('sold') ? 'sold' : (t.status.toLowerCase().includes('list') ? 'listed' : 'available');
-                const sub = [seat, t.pack ? packName(t.pack) : ''].filter(Boolean).join(' · ');
-                return `<tr>
-                    <td style="text-align:left;">${t.cat || '—'}${sub?`<br><span class="sub">${sub}</span>`:''}</td>
+                const newGroup = t.gid !== prevGid;
+                if (newGroup) { band = !band; prevGid = t.gid; }
+                const cls = [band ? 'band' : '', (newGroup && i > 0) ? 'group-start' : ''].filter(Boolean).join(' ');
+                const netClass = t.net ? (t.net > 0 ? 'profit-positive' : 'profit-negative') : '';
+                return `<tr class="${cls}">
+                    <td style="text-align:left;">${t.cat || '—'}${seat?`<br><span class="sub">${seat}</span>`:''}</td>
                     <td>${formatCurrency(t.fv)}</td>
                     <td>${t.price?formatCurrency(t.price):'—'}</td>
-                    <td class="${t.net>=0?'profit-positive':'profit-negative'}">${t.net?signedCurrency(t.net):'—'}</td>
+                    <td class="${netClass}">${t.net?signedCurrency(t.net):'—'}</td>
                     <td><span class="pill ${pillClass}">${t.status}</span></td>
                 </tr>`;
             }).join('') : `<tr><td colspan="5" style="text-align:center;opacity:.6;">No individual tickets listed</td></tr>`;
