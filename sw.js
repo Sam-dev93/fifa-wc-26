@@ -4,7 +4,7 @@
    Changing the string is what tells browsers a new version
    exists → the app auto-updates and wipes the old cache.
    ============================================================ */
-const CACHE_NAME = 'world-cup-tickets-v6';
+const CACHE_NAME = 'world-cup-tickets-v7';
 
 const PRECACHE = [
   './',

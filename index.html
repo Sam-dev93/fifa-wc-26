@@ -1964,12 +1964,15 @@
                     status
                 });
             }
-            // pack sizes: how many seats share each group (single / pair / 3-pack / 4-pack …)
+            // pack sizes per listing
             const sizeByGid = {};
             tickets.forEach(t => { sizeByGid[t.gid] = (sizeByGid[t.gid] || 0) + 1; });
             tickets.forEach(t => { t.pack = sizeByGid[t.gid]; });
+            // Pack mix = what's LEFT to sell: count only not-yet-sold seats, grouped by listing.
+            const remByGid = {};
+            tickets.forEach(t => { if (!/sold/i.test(t.status)) remByGid[t.gid] = (remByGid[t.gid] || 0) + 1; });
             const packMix = {};
-            Object.values(sizeByGid).forEach(sz => { packMix[sz] = (packMix[sz] || 0) + 1; });
+            Object.values(remByGid).forEach(sz => { if (sz > 0) packMix[sz] = (packMix[sz] || 0) + 1; });
 
             // "Need" orders table (cols A-D): Order ID, Cat, Qty, £ Each. Col E = note.
             // A live need order has a Category + Qty and is NOT marked closed (cancelled/sorted/etc).
@@ -2305,7 +2308,7 @@
             }).join('') : `<tr><td colspan="5" style="text-align:center;opacity:.6;">No individual tickets listed</td></tr>`;
             const packSummary = packMixLabel(m.packMix);
             const ticketTable = m.tickets.length ? `
-                ${packSummary?`<div class="pack-mix"><span class="pack-mix-label">Pack mix</span> ${packSummary}</div>`:''}
+                <div class="pack-mix"><span class="pack-mix-label">Packs left</span> ${packSummary || '<span class="pack-tag">All sold ✅</span>'}</div>
                 <button class="seats-toggle" onclick="this.nextElementSibling.classList.toggle('open'); this.classList.toggle('open');">
                     Show all ${m.tickets.length} tickets <span class="chev">▾</span>
                 </button>
