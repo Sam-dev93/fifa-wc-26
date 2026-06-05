@@ -1388,7 +1388,6 @@
         </div>
 
         <div class="header">
-            <button class="gear-btn" onclick="openConfigModal()" aria-label="Settings" title="Settings">⚙️</button>
             <h1>World Cup 2026</h1>
             <div class="subtitle-row"><p>Ticket Dashboard</p></div>
 
@@ -1401,13 +1400,7 @@
         <div class="sticky-header"></div>
 
         <div class="scrollable-content">
-            <div id="needsConfig" class="needs-config" style="display:none;">
-                <h2>👋 Let's get connected</h2>
-                <p>Add your four Google Sheet IDs and API key to start pulling live data.</p>
-                <button class="refresh-btn" onclick="openConfigModal()">Open Settings</button>
-            </div>
-
-            <div id="mainContent" style="display:none;">
+            <div id="mainContent">
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-value" id="totalTickets">0</div>
@@ -1512,25 +1505,6 @@
             </div>
         </div>
 
-        <!-- Config modal -->
-        <div id="configModal" class="match-popup-overlay" onclick="closeConfigModal(event)">
-            <div class="match-popup" onclick="event.stopPropagation()">
-                <div class="match-popup-header">
-                    <div>
-                        <div class="match-popup-title">⚙️ Settings</div>
-                        <div class="match-popup-date">Google Sheets connection</div>
-                    </div>
-                    <button class="close-btn" onclick="closeConfigModal()">×</button>
-                </div>
-                <div class="match-popup-content">
-                    <div class="config-grid" id="configGrid"></div>
-                    <p class="config-hint" style="margin-top:14px;">
-                        Paste each region's Google Sheet ID (the long string in its URL between <code>/d/</code> and <code>/edit</code>).
-                        Each sheet must be shared as <b>"Anyone with the link – Viewer"</b>. Your API key needs the Google Sheets API enabled.
-                    </p>
-                </div>
-            </div>
-        </div>
     </div>
 
     <script>
@@ -1587,12 +1561,12 @@
            (Settings saves to this device; values below are the defaults)
            ============================================================ */
         const DEFAULT_REGIONS = [
-            { name: 'Central Region', emoji: '🌎', sheetId: '' },
-            { name: 'East Coast',     emoji: '🗽', sheetId: '' },
-            { name: 'Mexico',         emoji: '🇲🇽', sheetId: '' },
-            { name: 'Western Region', emoji: '🌅', sheetId: '' }
+            { name: 'Central Region', emoji: '🌎', sheetId: '1t_DyebuJ7uQkXdEFGgJNGEzK_X5yiEgkioLpa6UgXdE' },
+            { name: 'East Coast',     emoji: '🗽', sheetId: '1o5pOzi332sJqE1FjxIzi9R3Z6HsP9fsTnTFwJQwF-_w' },
+            { name: 'Mexico',         emoji: '🇲🇽', sheetId: '1w7yYKhBiUUGznBhuL4LGt9QZ13c3Pz42smqDC9GgC5g' },
+            { name: 'Western Region', emoji: '🌅', sheetId: '17y7yx_ShvXuQIHVyQwAbKJ_6YpUSNViostYiuWEHiGc' }
         ];
-        const DEFAULT_API_KEY = '';
+        const DEFAULT_API_KEY = 'AIzaSyDb5oijZ2Zo-XG1YNKQygWDzJqZ7hkySrI';
 
         // Tabs that are never match tabs (templates / helpers).
         const SKIP_TABS = ['NEW HOME TEMPLATE','EVALUATION','DROPDOWN OPTIONS','SCOTLAND TST','ENGLAND SUPPORTERS','HOME','TEMPLATE'];
@@ -1600,66 +1574,20 @@
         const FETCH_RANGE = 'A1:AB600';
 
         /* ---- Config persistence ---- */
-        function loadConfig() {
-            let regions = DEFAULT_REGIONS.map(r => ({ ...r }));
-            let apiKey = DEFAULT_API_KEY;
-            try {
-                const saved = JSON.parse(localStorage.getItem('wc_config') || 'null');
-                if (saved) {
-                    apiKey = saved.apiKey || apiKey;
-                    if (Array.isArray(saved.regions)) {
-                        regions = regions.map((r, i) => ({ ...r, sheetId: saved.regions[i]?.sheetId || r.sheetId }));
-                    }
-                }
-            } catch (e) {}
-            return { regions, apiKey };
-        }
-        function saveConfig() {
-            const regions = REGIONS.map((r, i) => ({ sheetId: document.getElementById('cfg-sheet-' + i).value.trim() }));
-            const apiKey = document.getElementById('cfg-apikey').value.trim();
-            localStorage.setItem('wc_config', JSON.stringify({ regions, apiKey }));
-            const cfg = loadConfig();
-            REGIONS = cfg.regions; API_KEY = cfg.apiKey;
-            closeConfigModal();
-            if (isConfigured()) { showOrHideConfig(); refreshDashboard(); }
-        }
-        function isConfigured() { return API_KEY && REGIONS.some(r => r.sheetId); }
-
-        let { regions: REGIONS, apiKey: API_KEY } = loadConfig();
-
-        function extractSheetId(input) {
-            if (!input) return '';
-            const m = input.match(/\/d\/([a-zA-Z0-9-_]+)/);
-            return m ? m[1] : input.trim();
-        }
-
-        function renderConfigModal() {
-            const grid = document.getElementById('configGrid');
-            grid.innerHTML = REGIONS.map((r, i) => `
-                <div class="config-field">
-                    <label>${r.emoji} ${r.name} — Sheet ID</label>
-                    <input id="cfg-sheet-${i}" value="${r.sheetId || ''}" placeholder="1AbC…  (or paste the full URL)">
-                </div>
-            `).join('') + `
-                <div class="config-field">
-                    <label>🔑 Google API Key</label>
-                    <input id="cfg-apikey" value="${API_KEY || ''}" placeholder="AIza…">
-                </div>
-                <button class="config-save-btn" onclick="saveConfig()">Save & Load</button>
-            `;
-            // normalise any pasted URLs on blur
-            REGIONS.forEach((r, i) => {
-                const el = document.getElementById('cfg-sheet-' + i);
-                el.addEventListener('blur', () => { el.value = extractSheetId(el.value); });
-            });
-        }
-        function openConfigModal() { renderConfigModal(); document.getElementById('configModal').classList.add('show'); }
-        function closeConfigModal(e) { if (e && e.target.id !== 'configModal') return; document.getElementById('configModal').classList.remove('show'); }
-
+        // Hardcoded config — shared by everyone who opens this page.
+        const REGIONS = DEFAULT_REGIONS.map(r => ({ ...r }));
+        const API_KEY = DEFAULT_API_KEY;
+        function isConfigured() { return Boolean(API_KEY) && REGIONS.some(r => r.sheetId); }
+        // Settings UI removed — these are no-ops kept only so any stray references stay safe.
+        function openConfigModal() {}
+        function closeConfigModal() {}
+        function renderConfigModal() {}
+        function saveConfig() {}
         function showOrHideConfig() {
-            const ok = isConfigured();
-            document.getElementById('needsConfig').style.display = ok ? 'none' : 'block';
-            document.getElementById('mainContent').style.display = ok ? 'block' : 'none';
+            const main = document.getElementById('mainContent');
+            const needs = document.getElementById('needsConfig');
+            if (main) main.style.display = 'block';
+            if (needs) needs.style.display = 'none';
         }
 
         /* ---- Formatting helpers ---- */
@@ -1671,7 +1599,7 @@
 
         const UPPER = ['FC','AFC','USA','USNT','UK','US','NY','LA','SF','NZ','UAE','VAR','UEFA','FIFA','RO32','RO16','QTR','SEMI','FINAL'];
         const LOWER = ['v','vs','versus','and','the','of','at','in','on','for'];
-        function formatSingleWord(w){ if(!w) return ''; const u=w.toUpperCase(), l=w.toLowerCase(); if(UPPER.includes(u)) return u; if(LOWER.includes(l)) return l; return w.charAt(0).toUpperCase()+w.slice(1).toLowerCase(); }
+        function formatSingleWord(w){ if(!w) return ''; if(/\d/.test(w)) return w.toUpperCase(); const u=w.toUpperCase(), l=w.toLowerCase(); if(UPPER.includes(u)) return u; if(LOWER.includes(l)) return l; return w.charAt(0).toUpperCase()+w.slice(1).toLowerCase(); }
         function formatName(name){ if(!name) return ''; return String(name).split(/\s+/).map(formatSingleWord).join(' '); }
 
         /* ---- Match-tab name parser ---- */
@@ -1691,10 +1619,10 @@
             const matchNo = noMatch ? parseInt(noMatch[1], 10) : null;
             const cityMatch = title.match(/\(([^)]*)\)?\s*$/);
             const city = cityMatch ? cityMatch[1].trim() : '';
-            let teams = title.replace(/\s*\([^)]*\)?\s*$/, '');           // strip trailing (city)
-            teams = teams.replace(/^(RO32|RO16|R016|R032|QTR|SEMI)\s*/i, '');
-            teams = teams.replace(/^M\s?\d+\s*[-–—]?\s*/i, '').trim();      // strip leading M-number
-            teams = teams.replace(/^[-–—]\s*/, '').trim();
+            let teams = title.replace(/\s*\([^)]*\)?\s*$/, '');              // strip trailing (city)
+            teams = teams.replace(/^(RO32|RO16|R016|R032|QTR|SEMI)\s*[:\-–—]?\s*/i, ''); // strip stage token (+ optional : or -)
+            teams = teams.replace(/^M\s?\d+\s*[:\-–—]?\s*/i, '').trim();     // strip leading M-number (+ optional : or -)
+            teams = teams.replace(/^[:\-–—]\s*/, '').trim();                 // any leftover leading separator
             if (!teams || /^(FINAL|3RD PLACE|THIRD PLACE)$/i.test(teams)) teams = stage;
             const display = formatName(teams);
             return { matchNo, stage, stageOrder: order, city, display };
