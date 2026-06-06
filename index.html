@@ -1718,6 +1718,10 @@
                             🧾 Need List (CSV)
                             <span>Same list as a spreadsheet</span>
                         </button>
+                        <button class="pdf-option-btn" onclick="copyNeedList()">
+                            💬 Copy for WhatsApp
+                            <span>Plain text, ready to paste into a chat</span>
+                        </button>
                         <button class="pdf-option-btn" onclick="exportAllDataPDF()">
                             📊 Export All Regions Summary
                             <span>Headline figures for every region and match</span>
@@ -2438,6 +2442,35 @@
             a.href = url; a.download = 'need-list.csv'; a.click();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
             closePDFExportModal();
+        }
+        function buildNeedText() {
+            const orders = collectNeedOrders();
+            if (!orders.length) return 'Need List\n\nNo outstanding orders 🎉';
+            const totTickets = orders.reduce((s, o) => s + o.qty, 0);
+            let txt = `Need List · ${orders.length} order${orders.length === 1 ? '' : 's'} · ${totTickets} ticket${totTickets === 1 ? '' : 's'}\n`;
+            let curNo = null;
+            orders.forEach(o => {
+                if (o.matchNo !== curNo) { txt += `\n${o.match}\n`; curNo = o.matchNo; }
+                txt += `x${o.qty} ${o.cat} @ ${formatCurrency(o.each)}\n`;
+            });
+            return txt.trim();
+        }
+        function copyNeedList() {
+            const text = buildNeedText();
+            const ok = () => { showStatusMessage('Copied — paste into WhatsApp ✅', 'success'); closePDFExportModal(); };
+            const fallback = () => {
+                try {
+                    const ta = document.createElement('textarea');
+                    ta.value = text; ta.style.position = 'fixed'; ta.style.top = '0'; ta.style.left = '0'; ta.style.opacity = '0';
+                    document.body.appendChild(ta); ta.focus(); ta.select();
+                    const done = document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    if (done) ok(); else window.prompt('Copy this list:', text);
+                } catch (e) { window.prompt('Copy this list:', text); }
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(ok).catch(fallback);
+            } else { fallback(); }
         }
 
         function buildMatchTableBody(matches) {
