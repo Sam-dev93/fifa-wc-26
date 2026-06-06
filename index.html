@@ -1710,17 +1710,9 @@
                 </div>
                 <div class="match-popup-content" id="pdfExportContent">
                     <div class="pdf-export-options">
-                        <button class="pdf-option-btn" onclick="exportNeedPDF()">
-                            🎯 Need List (PDF)
-                            <span>What's left to buy, grouped by match</span>
-                        </button>
-                        <button class="pdf-option-btn" onclick="exportNeedCSV()">
-                            🧾 Need List (CSV)
-                            <span>Same list as a spreadsheet</span>
-                        </button>
-                        <button class="pdf-option-btn" onclick="copyNeedList()">
-                            💬 Copy for WhatsApp
-                            <span>Plain text, ready to paste into a chat</span>
+                        <button class="pdf-option-btn" onclick="openNeedList()">
+                            🎯 Need List
+                            <span>Filter by stage, then PDF / CSV / WhatsApp</span>
                         </button>
                         <button class="pdf-option-btn" onclick="exportAllDataPDF()">
                             📊 Export All Regions Summary
@@ -1730,6 +1722,31 @@
                             <h3>Export Individual Region:</h3>
                             <div id="pdfRegionsList"></div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Need List export (stage filter → format) -->
+        <div id="needListModal" class="match-popup-overlay" onclick="closeNeedList(event)">
+            <div class="match-popup" onclick="event.stopPropagation()">
+                <div class="match-popup-header">
+                    <div>
+                        <div class="match-popup-title">🎯 Need List</div>
+                        <div class="match-popup-date">Filter by stage, then choose a format</div>
+                    </div>
+                    <button class="close-btn" onclick="closeNeedList()">×</button>
+                </div>
+                <div class="match-popup-content">
+                    <div class="filter-group" style="margin-bottom:16px;">
+                        <div class="filter-group-label">Stage</div>
+                        <div class="chip-row" id="needStageChips"></div>
+                    </div>
+                    <div id="needPreview" class="pack-mix" style="margin-bottom:16px;"></div>
+                    <div class="pdf-export-options">
+                        <button class="pdf-option-btn" onclick="exportNeedPDF()">🎯 PDF<span>Summary, by category, then full detail</span></button>
+                        <button class="pdf-option-btn" onclick="exportNeedCSV()">🧾 CSV<span>Open in Sheets / Excel</span></button>
+                        <button class="pdf-option-btn" onclick="copyNeedList()">💬 Copy for WhatsApp<span>Plain text, ready to paste</span></button>
                     </div>
                 </div>
             </div>
@@ -2369,13 +2386,36 @@
             out.sort((a, b) => (a.match.matchNo || 9999) - (b.match.matchNo || 9999));
             return out;
         }
+        let needStage = 'All';
         function collectNeedOrders() {
             const orders = [];
-            dashboardData.matches.forEach(m => (m.needList || []).forEach(o => {
-                orders.push({ region: m.region, matchNo: m.matchNo || 0, match: matchAbbr(m), display: m.display, cat: normCat(o.cat), qty: o.qty || 0, each: o.each || 0 });
-            }));
+            dashboardData.matches.forEach(m => {
+                if (needStage !== 'All' && m.stage !== needStage) return;
+                (m.needList || []).forEach(o => {
+                    orders.push({ region: m.region, matchNo: m.matchNo || 0, match: matchAbbr(m), display: m.display, cat: normCat(o.cat), qty: o.qty || 0, each: o.each || 0 });
+                });
+            });
             orders.sort((a, b) => (a.matchNo || 9999) - (b.matchNo || 9999));
             return orders;
+        }
+        function openNeedList() {
+            closePDFExportModal();
+            needStage = 'All';
+            renderNeedStageChips();
+            document.getElementById('needListModal').classList.add('show');
+        }
+        function closeNeedList(e) { if (e && e.target && e.target.id !== 'needListModal') return; document.getElementById('needListModal').classList.remove('show'); }
+        function setNeedStage(s) { needStage = s; renderNeedStageChips(); }
+        function renderNeedStageChips() {
+            const present = STAGE_ORDER.filter(st => dashboardData.matches.some(m => m.stage === st && (m.needList || []).length));
+            const stages = ['All', ...present];
+            document.getElementById('needStageChips').innerHTML = stages.map(s =>
+                `<div class="chip ${needStage === s ? 'active' : ''}" onclick="setNeedStage('${s}')">${s}</div>`).join('');
+            const o = collectNeedOrders();
+            const t = o.reduce((a, x) => a + x.qty, 0);
+            document.getElementById('needPreview').innerHTML = o.length
+                ? `<span class="pack-mix-label">Exporting</span> <span class="pack-tag">${o.length} order${o.length === 1 ? '' : 's'}</span> <span class="pack-tag">${t} ticket${t === 1 ? '' : 's'}</span>`
+                : `<span class="pack-tag">No need orders in this stage</span>`;
         }
         function exportNeedPDF() {
             const { jsPDF } = window.jspdf;
@@ -2388,7 +2428,7 @@
             doc.setTextColor(20);
             if (!orders.length) {
                 doc.setFontSize(13); doc.text('No outstanding need orders.', 14, 42);
-                doc.save('need-list.pdf'); closePDFExportModal(); return;
+                doc.save('need-list.pdf'); closeNeedList(); return;
             }
             const totOrders = orders.length;
             const totTickets = orders.reduce((s, o) => s + o.qty, 0);
@@ -2420,7 +2460,7 @@
                 columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' } }
             });
             doc.save('need-list.pdf');
-            closePDFExportModal();
+            closeNeedList();
         }
         function exportNeedCSV() {
             const orders = collectNeedOrders();
@@ -2441,7 +2481,7 @@
             const a = document.createElement('a');
             a.href = url; a.download = 'need-list.csv'; a.click();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
-            closePDFExportModal();
+            closeNeedList();
         }
         function buildNeedText() {
             const orders = collectNeedOrders();
@@ -2457,7 +2497,7 @@
         }
         function copyNeedList() {
             const text = buildNeedText();
-            const ok = () => { showStatusMessage('Copied — paste into WhatsApp ✅', 'success'); closePDFExportModal(); };
+            const ok = () => { showStatusMessage('Copied — paste into WhatsApp ✅', 'success'); closeNeedList(); };
             const fallback = () => {
                 try {
                     const ta = document.createElement('textarea');
