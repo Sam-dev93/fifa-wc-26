@@ -1672,7 +1672,7 @@
 
                 <div id="regionsContainer"></div>
 
-                <button class="pdf-export-btn" onclick="showPDFExportModal()">📄 Export PDF</button>
+                <button class="pdf-export-btn" onclick="showPDFExportModal()">📤 Export</button>
             </div>
         </div>
 
@@ -1703,13 +1703,21 @@
             <div class="match-popup" onclick="event.stopPropagation()">
                 <div class="match-popup-header">
                     <div>
-                        <div class="match-popup-title">📄 Export PDF Report</div>
+                        <div class="match-popup-title">📤 Export</div>
                         <div class="match-popup-date">Choose what to export</div>
                     </div>
                     <button class="close-btn" onclick="closePDFExportModal()">×</button>
                 </div>
                 <div class="match-popup-content" id="pdfExportContent">
                     <div class="pdf-export-options">
+                        <button class="pdf-option-btn" onclick="exportNeedPDF()">
+                            🎯 Need List (PDF)
+                            <span>What's left to buy, grouped by match</span>
+                        </button>
+                        <button class="pdf-option-btn" onclick="exportNeedCSV()">
+                            🧾 Need List (CSV)
+                            <span>Same list as a spreadsheet</span>
+                        </button>
                         <button class="pdf-option-btn" onclick="exportAllDataPDF()">
                             📊 Export All Regions Summary
                             <span>Headline figures for every region and match</span>
@@ -2326,6 +2334,111 @@
             document.getElementById('pdfExportModal').classList.add('show');
         }
         function closePDFExportModal(e) { if (e && e.target.id !== 'pdfExportModal') return; document.getElementById('pdfExportModal').classList.remove('show'); }
+
+        /* ---- Need List export ---- */
+        function abbr3(s) { return String(s).replace(/[^a-z0-9]/gi, '').slice(0, 3).toUpperCase(); }
+        function matchAbbr(m) {
+            const parts = String(m.display).split(/\s+vs?\s+/i);
+            if (parts.length >= 2) return `M${m.matchNo || ''} ${abbr3(parts[0])} vs ${abbr3(parts[1])}`;
+            return `M${m.matchNo || ''} ${m.display}`;
+        }
+        function normCat(c) {
+            c = String(c || '').trim();
+            c = c.replace(/category/i, 'Cat').replace(/^cat\b/i, 'Cat');
+            if (c) c = c.charAt(0).toUpperCase() + c.slice(1);
+            return c || '—';
+        }
+        function buildNeedList() {
+            const out = [];
+            dashboardData.matches.forEach(m => {
+                const orders = m.needList || [];
+                if (!orders.length) return;
+                const groups = {}, order = [];
+                orders.forEach(o => {
+                    const cat = normCat(o.cat), price = o.each || 0;
+                    const key = cat + '|' + price.toFixed(2);
+                    if (!groups[key]) { groups[key] = { cat, price, qtys: [] }; order.push(key); }
+                    groups[key].qtys.push(o.qty);
+                });
+                out.push({ match: m, header: matchAbbr(m), lines: order.map(k => groups[k]) });
+            });
+            out.sort((a, b) => (a.match.matchNo || 9999) - (b.match.matchNo || 9999));
+            return out;
+        }
+        function collectNeedOrders() {
+            const orders = [];
+            dashboardData.matches.forEach(m => (m.needList || []).forEach(o => {
+                orders.push({ region: m.region, matchNo: m.matchNo || 0, match: matchAbbr(m), display: m.display, cat: normCat(o.cat), qty: o.qty || 0, each: o.each || 0 });
+            }));
+            orders.sort((a, b) => (a.matchNo || 9999) - (b.matchNo || 9999));
+            return orders;
+        }
+        function exportNeedPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const orders = collectNeedOrders();
+            doc.setFontSize(20); doc.setFont(undefined, 'bold'); doc.setTextColor(20);
+            doc.text('Need List', 14, 20);
+            doc.setFontSize(10); doc.setFont(undefined, 'normal'); doc.setTextColor(120);
+            doc.text('FIFA 26 Stock  ·  ' + new Date().toLocaleString('en-GB'), 14, 27);
+            doc.setTextColor(20);
+            if (!orders.length) {
+                doc.setFontSize(13); doc.text('No outstanding need orders.', 14, 42);
+                doc.save('need-list.pdf'); closePDFExportModal(); return;
+            }
+            const totOrders = orders.length;
+            const totTickets = orders.reduce((s, o) => s + o.qty, 0);
+            const totValue = orders.reduce((s, o) => s + o.qty * o.each, 0);
+            // headline summary
+            doc.setFontSize(13); doc.setFont(undefined, 'bold');
+            doc.text(`${totOrders} orders  ·  ${totTickets} tickets to source  ·  ${formatCurrency(totValue)}`, 14, 39);
+            doc.setFont(undefined, 'normal');
+            // by category
+            const byCat = {};
+            orders.forEach(o => { const k = o.cat; (byCat[k] = byCat[k] || { orders: 0, tickets: 0, value: 0 }); byCat[k].orders++; byCat[k].tickets += o.qty; byCat[k].value += o.qty * o.each; });
+            const catRows = Object.keys(byCat).sort().map(k => [k, byCat[k].orders, byCat[k].tickets, formatCurrency(byCat[k].value)]);
+            catRows.push([{ content: 'Total', styles: { fontStyle: 'bold' } }, { content: totOrders, styles: { fontStyle: 'bold' } }, { content: totTickets, styles: { fontStyle: 'bold' } }, { content: formatCurrency(totValue), styles: { fontStyle: 'bold' } }]);
+            doc.autoTable({
+                startY: 45,
+                head: [['By category', 'Orders', 'Tickets', 'Value']],
+                body: catRows,
+                styles: { fontSize: 10, cellPadding: 3 },
+                headStyles: { fillColor: [26, 164, 124], halign: 'left' },
+                columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } }
+            });
+            // full detail by match
+            doc.autoTable({
+                startY: doc.lastAutoTable.finalY + 9,
+                head: [['Match', 'Category', 'Qty', '£ Each']],
+                body: orders.map(o => [o.match, o.cat, o.qty, formatCurrency(o.each)]),
+                styles: { fontSize: 9, cellPadding: 2.5 },
+                headStyles: { fillColor: [26, 164, 124] },
+                columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' } }
+            });
+            doc.save('need-list.pdf');
+            closePDFExportModal();
+        }
+        function exportNeedCSV() {
+            const orders = collectNeedOrders();
+            const rows = [['Region', 'Match', 'Fixture', 'Category', 'Qty', 'Price Each', 'Line Total']];
+            orders.forEach(o => rows.push([o.region, 'M' + (o.matchNo || ''), o.display, o.cat, o.qty, o.each.toFixed(2), (o.qty * o.each).toFixed(2)]));
+            if (orders.length) {
+                const totTickets = orders.reduce((s, o) => s + o.qty, 0);
+                const totValue = orders.reduce((s, o) => s + o.qty * o.each, 0);
+                rows.push([]);
+                rows.push(['', '', '', 'TOTAL', totTickets, '', totValue.toFixed(2)]);
+            }
+            const csv = rows.map(r => r.map(c => {
+                const s = String(c == null ? '' : c);
+                return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+            }).join(',')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'need-list.csv'; a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            closePDFExportModal();
+        }
 
         function buildMatchTableBody(matches) {
             return matches.sort((a,b)=>(a.stageOrder-b.stageOrder)||((a.matchNo||9999)-(b.matchNo||9999)))
