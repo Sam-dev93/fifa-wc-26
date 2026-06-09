@@ -2386,11 +2386,11 @@
             out.sort((a, b) => (a.match.matchNo || 9999) - (b.match.matchNo || 9999));
             return out;
         }
-        let needStage = 'All';
+        let needStages = new Set();   // empty = All
         function collectNeedOrders() {
             const orders = [];
             dashboardData.matches.forEach(m => {
-                if (needStage !== 'All' && m.stage !== needStage) return;
+                if (needStages.size && !needStages.has(m.stage)) return;
                 (m.needList || []).forEach(o => {
                     orders.push({ region: m.region, matchNo: m.matchNo || 0, match: matchAbbr(m), display: m.display, cat: normCat(o.cat), qty: o.qty || 0, each: o.each || 0 });
                 });
@@ -2400,17 +2400,23 @@
         }
         function openNeedList() {
             closePDFExportModal();
-            needStage = 'All';
+            needStages = new Set();
             renderNeedStageChips();
             document.getElementById('needListModal').classList.add('show');
         }
         function closeNeedList(e) { if (e && e.target && e.target.id !== 'needListModal') return; document.getElementById('needListModal').classList.remove('show'); }
-        function setNeedStage(s) { needStage = s; renderNeedStageChips(); }
+        function setNeedStage(s) {
+            if (s === 'All') needStages = new Set();
+            else { needStages.has(s) ? needStages.delete(s) : needStages.add(s); }
+            renderNeedStageChips();
+        }
         function renderNeedStageChips() {
             const present = STAGE_ORDER.filter(st => dashboardData.matches.some(m => m.stage === st && (m.needList || []).length));
             const stages = ['All', ...present];
-            document.getElementById('needStageChips').innerHTML = stages.map(s =>
-                `<div class="chip ${needStage === s ? 'active' : ''}" onclick="setNeedStage('${s}')">${s}</div>`).join('');
+            document.getElementById('needStageChips').innerHTML = stages.map(s => {
+                const active = s === 'All' ? needStages.size === 0 : needStages.has(s);
+                return `<div class="chip ${active ? 'active' : ''}" onclick="setNeedStage('${s}')">${s}</div>`;
+            }).join('');
             const o = collectNeedOrders();
             const t = o.reduce((a, x) => a + x.qty, 0);
             document.getElementById('needPreview').innerHTML = o.length
