@@ -1945,9 +1945,15 @@
             let section = '', cArea = '', cBlock = '', cRow = '', cListed = '', groupFv = null, gid = 0;
             for (let r = 1; r < values.length; r++) {
                 const q = String(cell(values, r, 16)).trim();
-                const fv = num(cell(values, r, 8));
-                if (q && SECTION_LABELS.includes(q.toUpperCase()) && fv === 0) { section = q; cArea = ''; cBlock = ''; cRow = ''; cListed = ''; groupFv = null; continue; }
-                if (fv <= 0) continue;
+                // A row is a ticket when the FV cell actually contains a number — £0 FV
+                // (swaps / freebies) still counts as a ticket, a blank cell does not.
+                // This matches the Apps Script's definition exactly, so the app's ticket
+                // lists always reconcile with the sheet's TICKETS / REMAINING numbers.
+                const fvCell = cell(values, r, 8);
+                const hasFv = fvCell !== '' && fvCell !== null && !isNaN(parseFloat(String(fvCell).replace(/[£,\s]/g, '')));
+                const fv = num(fvCell);
+                if (q && SECTION_LABELS.includes(q.toUpperCase()) && !hasFv) { section = q; cArea = ''; cBlock = ''; cRow = ''; cListed = ''; groupFv = null; continue; }
+                if (!hasFv) continue;
                 const aRaw = String(cell(values, r, 12)).trim(); if (aRaw) cArea = aRaw;
                 const bRaw = String(cell(values, r, 13)).trim();
                 const rRaw = String(cell(values, r, 14)).trim();
