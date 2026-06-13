@@ -1862,16 +1862,16 @@
            CONFIG  — paste your IDs here OR use the ⚙️ Settings button
            (Settings saves to this device; values below are the defaults)
            ============================================================ */
+        // Single master workbook — "FIFA World Cup 26 - All Regions".
+        // All 104 match tabs (M1–M104) now live here; the 4 regional
+        // workbooks are kept only as read-only backups and are no longer read.
         const DEFAULT_REGIONS = [
-            { name: 'Central Region', emoji: '🌎', sheetId: '1t_DyebuJ7uQkXdEFGgJNGEzK_X5yiEgkioLpa6UgXdE' },
-            { name: 'East Coast',     emoji: '🗽', sheetId: '1o5pOzi332sJqE1FjxIzi9R3Z6HsP9fsTnTFwJQwF-_w' },
-            { name: 'Mexico',         emoji: '🇲🇽', sheetId: '1w7yYKhBiUUGznBhuL4LGt9QZ13c3Pz42smqDC9GgC5g' },
-            { name: 'Western Region', emoji: '🌅', sheetId: '17y7yx_ShvXuQIHVyQwAbKJ_6YpUSNViostYiuWEHiGc' }
+            { name: 'All Regions', emoji: '🏆', sheetId: '1wseeQp0vfCvohDf3vMvCCHvAOOdYCuEywK6XztW7SVc' }
         ];
         const DEFAULT_API_KEY = 'AIzaSyDb5oijZ2Zo-XG1YNKQygWDzJqZ7hkySrI';
 
-        // Tabs that are never match tabs (templates / helpers).
-        const SKIP_TABS = ['NEW HOME TEMPLATE','EVALUATION','DROPDOWN OPTIONS','SCOTLAND TST','ENGLAND SUPPORTERS','HOME','TEMPLATE'];
+        // Tabs that are never match tabs (templates / helpers / dashboard).
+        const SKIP_TABS = ['NEW HOME TEMPLATE','EVALUATION','DASHBOARD','EVALUATION DASHBOARD','DROPDOWN OPTIONS','SCOTLAND TST','ENGLAND SUPPORTERS','HOME','TEMPLATE','SHEET1'];
         const SECTION_LABELS = ['HOSPITALITY','CAT 1','CAT 2','CAT 3','CAT 4'];
         const FETCH_RANGE = 'A1:AB600';
 
@@ -2002,14 +2002,14 @@
                     if (lRaw) cListed = lRaw;
                 } else if (lRaw) { cListed = lRaw; }                                // Listed value appears mid-merge
                 const price = num(cell(values, r, 18));
-                let status = String(cell(values, r, 26)).trim();
+                let status = String(cell(values, r, 27)).trim();   // AB (was 26 before Order Status col)
                 if (!status) status = price > 0 ? 'Sold' : (cListed ? 'Listed' : 'Available');
                 tickets.push({
                     gid,
                     cat: cArea || section,
                     block: cBlock, row: cRow, seat,
                     listedOn: cListed,
-                    fv, price, net: num(cell(values, r, 25)),
+                    fv, price, net: num(cell(values, r, 26)),   // AA (was 25 before Order Status col)
                     status
                 });
             }
